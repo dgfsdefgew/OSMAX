@@ -1,0 +1,125 @@
+# Deployment Guide for GoodTalent OS
+
+This application is built with **React Router 7**, **Vite**, and **Better-SQLite3**.
+
+## Recommended Free Hosting: Render.com
+
+Because this application uses a SQLite database (`better-sqlite3`) and local file storage, standard serverless platforms like Vercel will effectively reset your database every time the server restarts (ephemeral filesystem).
+
+For a free demo that works (with the caveat that data might reset if the server sleeps/restarts), **Render.com** is recommended because it runs the app as a persistent Node.js service.
+
+### Option 1: Deploy to Render (Web Service)
+
+1.  **Push code to GitHub**:
+    *   Create a new repository on GitHub.
+    *   Run inside this folder:
+        ```bash
+        git init
+        git add .
+        git commit -m "Initial commit"
+        git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+        git push -u origin main
+        ```
+
+2.  **Create Service on Render**:
+    *   Go to [dashboard.render.com](https://dashboard.render.com/).
+    *   Click **New +** -> **Web Service**.
+    *   Connect your GitHub repository.
+    *   **Root Directory**: `login/os/apps/web` (Critical for build success)
+    *   **Runtime**: Node
+    *   **Build Command**: `npm install && npm run build`
+    *   **Start Command**: `npm start`
+    *   **Environment Variables**:
+        *   Key: `MISTRAL_API_KEY`
+        *   Value: `UdUPEQibkVUis0H2Ec6a9UeiSJYdqThH` (or your key)
+
+### Option 2: Deploy to Vercel (Serverless)
+
+**Warning**: Vercel is a serverless platform. 
+1. **Database Issues**: The local `sqlite` file will NOT work for saving data. It will reset on every request or deployment. 
+2. **Build Issues**: `better-sqlite3` might fail to compile on Vercel's environment. You may need to remove it or use a specific build configuration.
+
+**Steps:**
+1.  Go to [vercel.com/new](https://vercel.com/new).
+2.  Import your `OS3` repository.
+3.  **Project Settings**:
+    *   **Framework Preset**: Select **Vite** or **Remix** (if available).
+    *   **Root Directory**: Click "Edit" and select `login/os/apps/web`.
+4.  **Environment Variables**:
+    *   `MISTRAL_API_KEY`: `UdUPEQibkVUis0H2Ec6a9UeiSJYdqThH`
+5.  Click **Deploy**. 
+
+## 🏆 Best Hosting Alternatives (for SQLite)
+
+Since Vercel has trouble with local database files:
+
+### 1. Render.com (Recommended)
+*   **Why**: It runs a real server, not serverless functions.
+*   **Pros**: The app will actually *start*.
+*   **Cons**: On the free plan, data resets when the server "sleeps" (blocks of inactivity).
+
+### Option 3: Deploy to Fly.io (Best for SQLite)
+
+Fly.io is ideal for this application because it allows us to mount a persistent "Volume" (disk) to store the SQLite database, so data is never lost.
+
+**Prerequisites:**
+1.  Install `flyctl` (Windows PowerShell): `iwr https://fly.io/install.ps1 -useb | iex`
+2.  Sign up/Login: `fly auth login`
+
+**Deployment Steps:**
+
+1.  **Navigate to the app folder**:
+    ```bash
+    cd login/os/apps/web
+    ```
+
+2.  **Initialize App**:
+    ```bash
+    fly launch --no-deploy
+    ```
+    *   **App Name**: (Choose a unique name)
+    *   **Region**: (Choose one close to you)
+    *   **Database**: None (we use SQLite)
+    *   **Redis**: No
+
+3.  **Create Persistent Volume** (Crucial Step):
+    This command creates a 1GB disk named `data` to store your database.
+    ```bash
+    fly volumes create data --size 1 --region <YOUR_REGION_CODE>
+    ```
+    *(Use the same region you chose in step 2, e.g., `iad`, `lhr`, `sjc`)*
+
+4.  **Edit `fly.toml`**:
+    Open the generated `fly.toml` file and add this section at the bottom to mount the volume. 
+    
+    ```toml
+    [mounts]
+    source = "data"
+    destination = "/app/data"
+    ```
+
+5.  **Set Environment Secret**:
+    ```bash
+    fly secrets set MISTRAL_API_KEY=UdUPEQibkVUis0H2Ec6a9UeiSJYdqThH
+    ```
+
+6.  **Deploy**:
+    ```bash
+    fly deploy
+    ```
+
+### 3. Switch Database (For Vercel Support)
+To make this app work perfectly on Vercel, you must switch from `better-sqlite3` to a cloud database:
+*   **Turso**: Cloud SQLite (easiest migration).
+*   **Neon**: Serverless Postgres.
+
+## Important Notes
+*   **Database**: The `local.sqlite` file is used for data. In "free" hosting, this file is widely ephemeral. For a real production app, switching to **Neon (Postgres)** or **Turso (LibSQL)** is required.
+*   **Uploads**: File uploads go to `public/uploads`. In free hosting, these files disappear on each deployment. Use **UploadThing** or **AWS S3** for production.
+
+## Running Locally
+
+```bash
+npm install
+npm run dev
+```
